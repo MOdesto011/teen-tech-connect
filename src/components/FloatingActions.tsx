@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Message {
   role: "user" | "assistant";
@@ -16,7 +17,7 @@ const FloatingActions = () => {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
-      content: "Olá! Sou o assistente virtual da ConectTeen. Como posso ajudá-lo hoje?"
+      content: "Olá! Sou o assistente virtual da ConectTeen. Como posso ajudá-lo hoje? 😊"
     }
   ]);
   const [inputMessage, setInputMessage] = useState("");
@@ -24,9 +25,11 @@ const FloatingActions = () => {
   const { toast } = useToast();
 
   const handleCall = () => {
+    // Open phone dialer
+    window.location.href = 'tel:+5585984133989';
     toast({
       title: "Iniciando chamada...",
-      description: "Em breve um de nossos especialistas entrará em contato!",
+      description: "Conectando você com nossa equipe!",
     });
   };
 
@@ -39,21 +42,53 @@ const FloatingActions = () => {
     setIsLoading(true);
 
     try {
-      // Placeholder for AI chat - will be implemented with Lovable Cloud
-      setTimeout(() => {
-        setMessages(prev => [
-          ...prev,
-          {
-            role: "assistant",
-            content: "Obrigado pela sua mensagem! Nossa equipe está analisando seu pedido. Para implementar o chat com IA completo, vamos precisar conectar o Lovable Cloud. Por enquanto, você pode entrar em contato pelo botão de ligação!"
-          }
-        ]);
+      console.log('Sending message to AI:', userMessage);
+      
+      const { data, error } = await supabase.functions.invoke('chat-ai', {
+        body: { 
+          messages: [
+            ...messages.filter(m => m.role !== "assistant" || m.content !== "Olá! Sou o assistente virtual da ConectTeen. Como posso ajudá-lo hoje? 😊"),
+            { role: "user", content: userMessage }
+          ]
+        }
+      });
+
+      if (error) {
+        console.error('Supabase function error:', error);
+        throw error;
+      }
+
+      console.log('AI response:', data);
+
+      if (data.error) {
+        if (data.error === 'rate_limit') {
+          toast({
+            title: "Limite excedido",
+            description: data.message,
+            variant: "destructive",
+          });
+        } else if (data.error === 'payment_required') {
+          toast({
+            title: "Serviço temporariamente indisponível",
+            description: data.message,
+            variant: "destructive",
+          });
+        } else {
+          throw new Error(data.message || 'Erro desconhecido');
+        }
         setIsLoading(false);
-      }, 1000);
+        return;
+      }
+
+      const aiResponse = data.message;
+      setMessages(prev => [...prev, { role: "assistant", content: aiResponse }]);
+      setIsLoading(false);
+
     } catch (error) {
+      console.error('Error sending message:', error);
       toast({
         title: "Erro ao enviar mensagem",
-        description: "Tente novamente mais tarde.",
+        description: "Desculpe, tivemos um problema. Tente usar o botão de ligação!",
         variant: "destructive",
       });
       setIsLoading(false);
@@ -136,6 +171,7 @@ const FloatingActions = () => {
           className="w-14 h-14 rounded-full shadow-2xl hover:shadow-[0_0_32px_hsla(210,100%,50%,0.6)] transition-all hover:scale-110"
           onClick={() => setIsChatOpen(!isChatOpen)}
           variant={isChatOpen ? "secondary" : "hero"}
+          title="Chat com IA"
         >
           {isChatOpen ? <X className="w-6 h-6" /> : <MessageCircle className="w-6 h-6" />}
         </Button>
@@ -144,6 +180,7 @@ const FloatingActions = () => {
           size="icon"
           className="w-14 h-14 rounded-full shadow-2xl bg-accent hover:bg-accent/90 hover:shadow-[0_0_32px_hsla(25,100%,60%,0.6)] transition-all hover:scale-110"
           onClick={handleCall}
+          title="Ligar agora"
         >
           <Phone className="w-6 h-6" />
         </Button>
